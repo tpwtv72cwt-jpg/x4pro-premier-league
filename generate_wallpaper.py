@@ -302,15 +302,15 @@ def render(data: dict, tz: ZoneInfo, with_crests: bool = False) -> Image.Image:
                 centre = m["kickoff"].strftime("%a %H:%M").upper()
                 font_c = f_time
             cwid = d.textlength(centre, font=font_c)
-            d.text(((WIDTH - cwid) / 2, mid_y if font_c is f_score else mid_y + 3), centre, font=font_c, fill=0)
+            d.text(((WIDTH - cwid) / 2, (mid_y + 4) if font_c is f_score else mid_y + 7), centre, font=font_c, fill=0)
 
             # Names fill the gap between crest and centre column.
             name_room = int((WIDTH / 2 - cwid / 2) - (MARGIN + CREST + CREST_GAP)) - 8
             home_name = truncate(d, m["home"]["name"], f_team, name_room)
             away_name = truncate(d, m["away"]["name"], f_team, name_room)
-            d.text((MARGIN + CREST + CREST_GAP, mid_y + 2), home_name, font=f_team, fill=0)
+            d.text((MARGIN + CREST + CREST_GAP, mid_y + 6), home_name, font=f_team, fill=0)
             aw = d.textlength(away_name, font=f_team)
-            d.text((WIDTH - MARGIN - CREST - CREST_GAP - aw, mid_y + 2), away_name, font=f_team, fill=0)
+            d.text((WIDTH - MARGIN - CREST - CREST_GAP - aw, mid_y + 6), away_name, font=f_team, fill=0)
 
             y += row_h
             d.line([MARGIN + 4, y - 6, WIDTH - MARGIN - 4, y - 6], fill=0, width=1)
