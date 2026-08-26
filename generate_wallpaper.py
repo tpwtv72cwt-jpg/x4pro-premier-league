@@ -46,11 +46,13 @@ FONT_CANDIDATES = {
     "bold": [
         "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
         "/System/Library/Fonts/Helvetica.ttc",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     ],
     "regular": [
         "/System/Library/Fonts/Supplemental/Arial.ttf",
         "/System/Library/Fonts/Helvetica.ttc",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     ],
 }
@@ -162,8 +164,8 @@ def crest(badge_id: str | None, size: int = CREST) -> Image.Image | None:
     os.makedirs(CACHE_DIR, exist_ok=True)
     path = os.path.join(CACHE_DIR, f"{badge_id}.png")
     if not os.path.exists(path):
-        for size in (50, 25, 100):
-            url = f"https://resources.premierleague.com/premierleague/badges/{size}/{badge_id}.png"
+        for cdn_size in (50, 25, 100):
+            url = f"https://resources.premierleague.com/premierleague/badges/{cdn_size}/{badge_id}.png"
             try:
                 data = urllib.request.urlopen(urllib.request.Request(url, headers=CDN_HEADERS), timeout=20).read()
                 Image.open(io.BytesIO(data)).save(path)
