@@ -2,9 +2,12 @@ name: Update wallpaper
 
 on:
   schedule:
+    # Every hour at :13. Off the hour to dodge the congestion GitHub sees at
+    # :00, which delays scheduled runs.
     - cron: "13 * * * *"
   workflow_dispatch:
 
+# A slow run must never overlap the next tick and fight over the commit.
 concurrency:
   group: update-wallpaper
   cancel-in-progress: false
@@ -25,9 +28,6 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: Install fonts
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-liberation
-
       - name: Render the wallpaper
         run: python generate_wallpaper.py -o PremierLeague.bmp --tz Asia/Kolkata
 
@@ -41,5 +41,4 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add PremierLeague.bmp
           git commit -m "chore: refresh Premier League wallpaper"
-          git pull --rebase --autostash origin main
           git push
