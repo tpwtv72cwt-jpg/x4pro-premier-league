@@ -120,7 +120,7 @@ def fetch_gameweek(tz: ZoneInfo) -> dict:
                 "badge": badge_ids.get(int(team["id"])),
                 "name": team.get("shortName") or team.get("name") or "Unknown",
                 "abbr": (club.get("abbr") or team.get("shortName") or "UNK")[:3].upper(),
-                "score": entry.get("score"),
+                     "score": None if entry.get("score") is None else int(entry["score"]),
             }
 
         kickoff = datetime.fromtimestamp(float(f["kickoff"]["millis"]) / 1000, timezone.utc).astimezone(tz)
