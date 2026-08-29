@@ -14,13 +14,14 @@ Usage:  python3 generate_x4pro_pl.py [-o PremierLeague.bmp] [--tz Asia/Kolkata]
 from __future__ import annotations
 
 import argparse
+import hashlib
 import io
 import json
 import os
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
@@ -120,7 +121,7 @@ def fetch_gameweek(tz: ZoneInfo) -> dict:
                 "badge": badge_ids.get(int(team["id"])),
                 "name": team.get("shortName") or team.get("name") or "Unknown",
                 "abbr": (club.get("abbr") or team.get("shortName") or "UNK")[:3].upper(),
-                     "score": None if entry.get("score") is None else int(entry["score"]),
+                "score": None if entry.get("score") is None else int(entry["score"]),
             }
 
         kickoff = datetime.fromtimestamp(float(f["kickoff"]["millis"]) / 1000, timezone.utc).astimezone(tz)
@@ -329,12 +330,77 @@ def render(data: dict, tz: ZoneInfo, with_crests: bool = False) -> Image.Image:
     return img
 
 
+def write_fingerprint(data: dict, path: str) -> str:
+    """A hash of everything the image says, minus the clock.
+
+    The footer stamps the render time, so the BMP differs on every run and is
+    useless for deciding whether to commit — at a 15-minute cadence that would
+    push a new 48KB binary ~96 times a day forever. This covers the scores,
+    kickoffs and table instead, so the workflow commits when there is news.
+    """
+    parts = [str(data["gameweek"])]
+    for m in data["matches"]:
+        parts.append(f"{m['home']['name']}:{m['home']['score']}-"
+                     f"{m['away']['score']}:{m['away']['name']}:"
+                     f"{int(m['kickoff'].timestamp())}:{m['status']}")
+    for row in data["standings"]:
+        parts.append(f"{row['pos']}:{row['name']}:{row['played']}:{row['gd']}:{row['points']}")
+    digest = hashlib.sha256("|".join(parts).encode()).hexdigest()
+    with open(path, "w") as f:
+        f.write(digest + "\n")
+    return digest
+
+
+def write_schedule(data: dict, path: str) -> int:
+    """UTC epoch seconds at which this image's content changes.
+
+    The reader wakes itself from deep sleep at these moments instead of polling
+    on a timer, so the list should hold the times the picture actually goes
+    stale and nothing else: each kickoff (the match moves out of "upcoming")
+    and each final whistle (the score and the table settle).
+
+    Offset past the moment itself so the hourly workflow has re-rendered before
+    the device asks for the file, and padded with a daily entry so a device that
+    has been asleep for a week still comes back for the next gameweek.
+    """
+    LAG = 15 * 60          # let the scheduled render land first
+    FULL_TIME = 125 * 60   # 90 minutes plus half time and stoppages
+    CATCH_UP = 50 * 60     # see below
+
+    now = datetime.now(timezone.utc)
+    moments = set()
+    for m in data["matches"]:
+        kickoff = m["kickoff"].astimezone(timezone.utc)
+        moments.add(kickoff + timedelta(seconds=LAG))
+        moments.add(kickoff + timedelta(seconds=FULL_TIME + LAG))
+        # A scheduled run can be late — GitHub delays cron under load — so the
+        # device can arrive just before the render that has the final score and
+        # then have no reason to come back for hours. One catch-up pass after
+        # full time costs a few seconds of radio and closes that window.
+        moments.add(kickoff + timedelta(seconds=FULL_TIME + CATCH_UP))
+
+    # A baseline so the list is never empty: 06:00 UTC each day for a week.
+    midnight = now.replace(hour=6, minute=0, second=0, microsecond=0)
+    for day in range(8):
+        moments.add(midnight + timedelta(days=day))
+
+    upcoming = sorted(t for t in moments if t > now)
+    with open(path, "w") as f:
+        f.write("# Wallpaper refresh moments, UTC epoch seconds.\n")
+        f.write(f"# Written {now.strftime('%Y-%m-%d %H:%M')} UTC by generate_wallpaper.py\n")
+        for t in upcoming:
+            f.write(f"{int(t.timestamp())}\n")
+    return len(upcoming)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("-o", "--out", default="PremierLeague.bmp")
     ap.add_argument("--tz", default="Asia/Kolkata")
     ap.add_argument("--preview", action="store_true", help="also write a PNG preview")
     ap.add_argument("--table-crests", action="store_true", help="draw crests in the league table too")
+    ap.add_argument("--schedule", default="refresh.txt", help="where to write the device wake schedule")
+    ap.add_argument("--fingerprint", default="state.txt", help="where to write the data fingerprint")
     args = ap.parse_args()
 
     tz = ZoneInfo(args.tz)
@@ -346,8 +412,11 @@ def main() -> None:
     img.convert("1").save(args.out, "BMP")
     if args.preview:
         img.save(os.path.splitext(args.out)[0] + ".png")
+    moments = write_schedule(data, args.schedule)
+    write_fingerprint(data, args.fingerprint)
     print(f"wrote {args.out} ({os.path.getsize(args.out)} bytes) — gameweek {data['gameweek']}, "
           f"{len(data['matches'])} fixtures")
+    print(f"wrote {args.schedule} — {moments} refresh moments")
 
 
 if __name__ == "__main__":
